@@ -1,113 +1,105 @@
+import React from 'react';
+import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { HeaderButton, Text } from '@react-navigation/elements';
-import {
-  createStaticNavigation,
-  StaticParamList,
-} from '@react-navigation/native';
+import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Image } from 'react-native';
-import bell from '../assets/bell.png';
-import newspaper from '../assets/newspaper.png';
-import { Profile } from './screens/Profile';
-import { Settings } from './screens/Settings';
-import { Updates } from './screens/Updates';
-import { NotFound } from './screens/NotFound';
-import HomeScreen from './screens/HomeScreen';
-import PlayerDashboard from './screens/PlayerDashboard';
+import { Colors } from '../theme';
 
-const HomeTabs = createBottomTabNavigator({
-  screens: {
-    Home: {
-      screen: HomeScreen,
-      options: {
-        title: 'Search',
-        tabBarIcon: ({ color, size }) => (
-          <Image
-            source={newspaper}
-            tintColor={color}
-            style={{
-              width: size,
-              height: size,
-            }}
-          />
-        ),
-      },
-    },
-    Updates: {
-      screen: Updates,
-      options: {
-        tabBarIcon: ({ color, size }) => (
-          <Image
-            source={bell}
-            tintColor={color}
-            style={{
-              width: size,
-              height: size,
-            }}
-          />
-        ),
-      },
-    },
-  },
-});
+import {
+  LoginScreen,
+  HomeScreen,
+  GameDetailsScreen,
+  BattleScreen,
+  LeaderboardScreen,
+} from '../screens';
 
+// ── Tab Navigator ─────────────────────────────────────────────────
+const Tab = createBottomTabNavigator();
 
-const RootStack = createNativeStackNavigator({
-  screens: {
-    HomeTabs: {
-      screen: HomeTabs,
-      options: {
-        title: 'Home',
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
         headerShown: false,
-      },
-    },
-    PlayerDashboard: {
-  screen: PlayerDashboard,
-  options: {
-    title: 'Player Profile',
-      },
-    },
-    Profile: {
-      screen: Profile,
-      linking: {
-        path: ':user(@[a-zA-Z0-9-_]+)',
-        parse: {
-          user: (value) => value.replace(/^@/, ''),
+        tabBarStyle: {
+          backgroundColor: Colors.bgPrimary,
+          borderTopColor: Colors.border,
+          borderTopWidth: 1,
+          height: 60,
+          paddingBottom: 8,
         },
-        stringify: {
-          user: (value) => `@${value}`,
-        },
-      },
-    },
-    Settings: {
-      screen: Settings,
-      options: ({ navigation }) => ({
-        presentation: 'modal',
-        headerRight: () => (
-          <HeaderButton onPress={navigation.goBack}>
-            <Text>Close</Text>
-          </HeaderButton>
-        ),
-      }),
-    },
-    NotFound: {
-      screen: NotFound,
-      options: {
-        title: '404',
-      },
-      linking: {
-        path: '*',
-      },
-    },
+        tabBarActiveTintColor: Colors.neonOrange,
+        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+      }}
+    >
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏀</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// ── Root Stack ────────────────────────────────────────────────────
+const Stack = createNativeStackNavigator();
+
+const arenaTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: Colors.bgPrimary,
+    card: Colors.bgSecondary,
+    text: Colors.textPrimary,
+    border: Colors.border,
+    primary: Colors.neonOrange,
   },
-});
+};
 
-export const Navigation = createStaticNavigation(RootStack);
-
-type RootStackParamList = StaticParamList<typeof RootStack>;
-
-declare global {
-  namespace ReactNavigation {
-    interface RootParamList extends RootStackParamList {}
-  }
+export function Navigation({ onReady }: { onReady?: () => void }) {
+  return (
+    <NavigationContainer theme={arenaTheme} onReady={onReady}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor: Colors.bgPrimary },
+        }}
+      >
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen
+          name="GameDetails"
+          component={GameDetailsScreen}
+          options={{
+            headerShown: true,
+            headerTransparent: true,
+            headerTintColor: Colors.textPrimary,
+            headerTitle: '',
+          }}
+        />
+        <Stack.Screen
+          name="Battle"
+          component={BattleScreen}
+          options={{
+            headerShown: true,
+            headerTransparent: true,
+            headerTintColor: Colors.textPrimary,
+            headerTitle: '',
+            presentation: 'modal',
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
 }
