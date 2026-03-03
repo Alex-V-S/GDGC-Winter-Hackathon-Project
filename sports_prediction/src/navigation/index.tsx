@@ -13,6 +13,7 @@ import { Settings } from './screens/Settings';
 import { Updates } from './screens/Updates';
 import { NotFound } from './screens/NotFound';
 import HomeScreen from './screens/HomeScreen';
+import PlayerDashboard from './screens/PlayerDashboard';
 
 const HomeTabs = createBottomTabNavigator({
   screens: {
@@ -50,6 +51,7 @@ const HomeTabs = createBottomTabNavigator({
   },
 });
 
+
 const RootStack = createNativeStackNavigator({
   screens: {
     HomeTabs: {
@@ -57,6 +59,12 @@ const RootStack = createNativeStackNavigator({
       options: {
         title: 'Home',
         headerShown: false,
+      },
+    },
+    PlayerDashboard: {
+  screen: PlayerDashboard,
+  options: {
+    title: 'Player Profile',
       },
     },
     Profile: {
