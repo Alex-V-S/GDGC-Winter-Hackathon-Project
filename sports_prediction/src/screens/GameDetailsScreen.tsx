@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-gifted-charts';
 import { Colors } from '../theme';
-import { NBAGame } from '../types/index';
+import { NBAGame, NBAPlayer } from '../types/index';
 import { GlassCard, PlayerStatCard } from '../components';
+import { fetchPlayerPointsPrediction } from '../services/mlPredictions';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function GameDetailsScreen({ route, navigation }: any) {
   const game: NBAGame = route.params.game;
+  const [playersWithPredictions, setPlayersWithPredictions] = useState<NBAPlayer[]>(game.topPlayers);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
 
   // Animated 3D basketball
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -33,13 +36,53 @@ export default function GameDetailsScreen({ route, navigation }: any) {
     ]).start();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPredictions = async () => {
+      setPlayersWithPredictions(game.topPlayers);
+      setLoadingPredictions(true);
+
+      const updatedPlayers = await Promise.all(
+        game.topPlayers.map(async (player) => {
+          const ml = await fetchPlayerPointsPrediction(player.name, player.team);
+          if (!ml) {
+            return player;
+          }
+
+          const recentGames = ml.historical_performance.map((item) => item.points);
+
+          return {
+            ...player,
+            ppg: ml.season_averages.ppg,
+            rpg: ml.season_averages.rpg,
+            apg: ml.season_averages.apg,
+            recentGames: recentGames.length > 0 ? recentGames : player.recentGames,
+            projection: ml.prediction.projected_points,
+          };
+        })
+      );
+
+      if (!cancelled) {
+        setPlayersWithPredictions(updatedPlayers);
+        setLoadingPredictions(false);
+      }
+    };
+
+    loadPredictions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [game]);
+
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
   // Chart data for first top player
-  const chartPlayer = game.topPlayers[0];
+  const chartPlayer = playersWithPredictions[0];
   const chartData = chartPlayer
     ? [
         ...chartPlayer.recentGames.map((v: number, i: number) => ({
@@ -93,9 +136,13 @@ export default function GameDetailsScreen({ route, navigation }: any) {
 
           {/* Player Stats Cards */}
           <Text style={styles.sectionTitle}>⭐ Key Players</Text>
-          {game.topPlayers.map((p: any) => (
+          {playersWithPredictions.map((p) => (
             <PlayerStatCard key={p.id} player={p} />
           ))}
+
+          {loadingPredictions && (
+            <Text style={styles.mlStatusText}>Updating projections from ML engine...</Text>
+          )}
 
           {/* Performance Trend Chart */}
           {chartPlayer && (
@@ -188,6 +235,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 20,
     marginBottom: 12,
+  },
+  mlStatusText: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: -4,
+    marginBottom: 8,
   },
   // Chart
   chartCard: { alignItems: 'center', paddingVertical: 20 },
