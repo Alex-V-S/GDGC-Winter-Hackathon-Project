@@ -14,7 +14,7 @@ import { LineChart } from 'react-native-gifted-charts';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Colors } from '../theme';
 import { NBAGame, NBAPlayer, RootStackParamList } from '../types/index';
-import { GlassCard, PlayerStatCard } from '../components';
+import { GlassCard } from '../components';
 import { getPlayerPrediction, PlayerPredictionResponse } from '../services/api';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -41,6 +41,7 @@ export default function GameDetailsScreen({ route, navigation }: GameDetailsProp
   const [playersWithPredictions, setPlayersWithPredictions] = useState<NBAPlayer[]>(game.topPlayers);
   const [loadingPredictions, setLoadingPredictions] = useState(false);
   const [mlData, setMlData] = useState<PlayerPredictionResponse | null>(null);
+  const [awayData, setAwayData] = useState<PlayerPredictionResponse | null>(null);
 
   // Animated 3D basketball
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -63,31 +64,35 @@ export default function GameDetailsScreen({ route, navigation }: GameDetailsProp
       setLoadingPredictions(true);
 
       const homeTeamName = game.homeTeam.name;
-      const starPlayer = TEAM_STAR_PLAYERS[homeTeamName];
+      const awayTeamName = game.awayTeam.name;
+      const homeStar = TEAM_STAR_PLAYERS[homeTeamName];
+      const awayStar = TEAM_STAR_PLAYERS[awayTeamName];
 
-      let starPrediction: PlayerPredictionResponse | null = null;
-      if (starPlayer) {
-        starPrediction = await getPlayerPrediction(starPlayer, homeTeamName);
-      }
+      const [homePrediction, awayPrediction] = await Promise.all([
+        homeStar ? getPlayerPrediction(homeStar, homeTeamName) : Promise.resolve(null),
+        awayStar ? getPlayerPrediction(awayStar, awayTeamName) : Promise.resolve(null),
+      ]);
 
       const updatedPlayers = game.topPlayers.map((player) => {
-        if (!starPrediction || player.name !== starPrediction.player.name) {
-          return player;
-        }
+        const match = [homePrediction, awayPrediction].find(
+          (pred) => pred && pred.player.name === player.name
+        );
+        if (!match) return player;
 
-        const recentGames = starPrediction.historical_performance.map((item) => item.points);
+        const recentGames = match.historical_performance.map((item) => item.points);
         return {
           ...player,
-          ppg: starPrediction.season_averages.ppg,
-          rpg: starPrediction.season_averages.rpg,
-          apg: starPrediction.season_averages.apg,
+          ppg: match.season_averages.ppg,
+          rpg: match.season_averages.rpg,
+          apg: match.season_averages.apg,
           recentGames: recentGames.length > 0 ? recentGames : player.recentGames,
-          projection: starPrediction.prediction.projected_points,
+          projection: match.prediction.projected_points,
         };
       });
 
       if (!cancelled) {
-        setMlData(starPrediction);
+        setMlData(homePrediction);
+        setAwayData(awayPrediction);
         setPlayersWithPredictions(updatedPlayers);
         setLoadingPredictions(false);
       }
@@ -183,14 +188,60 @@ export default function GameDetailsScreen({ route, navigation }: GameDetailsProp
             </View>
           )}
 
-          {/* Player Stats Cards */}
+          {/* Key Players — side-by-side ML cards */}
           <Text style={styles.sectionTitle}>⭐ Key Players</Text>
-          {playersWithPredictions.map((p) => (
-            <PlayerStatCard key={p.id} player={p} />
-          ))}
-
-          {loadingPredictions && (
-            <Text style={styles.mlStatusText}>Updating projections from ML engine...</Text>
+          {loadingPredictions ? (
+            <Text style={styles.mlStatusText}>Loading player projections...</Text>
+          ) : (
+            <View style={styles.playerCardsRow}>
+              {mlData && (
+                <GlassCard style={styles.playerCard}>
+                  <Text style={styles.playerCardTeam}>{game.homeTeam.abbr}</Text>
+                  <Text style={styles.playerCardName}>{mlData.player.name}</Text>
+                  <Text style={styles.playerCardProjValue}>{mlData.prediction.projected_points}</Text>
+                  <Text style={styles.playerCardProjLabel}>Proj PTS</Text>
+                  <View style={styles.playerCardMiniStats}>
+                    <View style={styles.playerCardMiniStat}>
+                      <Text style={styles.miniStatVal}>{mlData.season_averages.ppg}</Text>
+                      <Text style={styles.miniStatLbl}>PTS</Text>
+                    </View>
+                    <View style={styles.playerCardMiniStat}>
+                      <Text style={styles.miniStatVal}>{mlData.season_averages.rpg}</Text>
+                      <Text style={styles.miniStatLbl}>REB</Text>
+                    </View>
+                    <View style={styles.playerCardMiniStat}>
+                      <Text style={styles.miniStatVal}>{mlData.season_averages.apg}</Text>
+                      <Text style={styles.miniStatLbl}>AST</Text>
+                    </View>
+                  </View>
+                </GlassCard>
+              )}
+              {awayData && (
+                <GlassCard style={styles.playerCard}>
+                  <Text style={styles.playerCardTeam}>{game.awayTeam.abbr}</Text>
+                  <Text style={styles.playerCardName}>{awayData.player.name}</Text>
+                  <Text style={styles.playerCardProjValue}>{awayData.prediction.projected_points}</Text>
+                  <Text style={styles.playerCardProjLabel}>Proj PTS</Text>
+                  <View style={styles.playerCardMiniStats}>
+                    <View style={styles.playerCardMiniStat}>
+                      <Text style={styles.miniStatVal}>{awayData.season_averages.ppg}</Text>
+                      <Text style={styles.miniStatLbl}>PTS</Text>
+                    </View>
+                    <View style={styles.playerCardMiniStat}>
+                      <Text style={styles.miniStatVal}>{awayData.season_averages.rpg}</Text>
+                      <Text style={styles.miniStatLbl}>REB</Text>
+                    </View>
+                    <View style={styles.playerCardMiniStat}>
+                      <Text style={styles.miniStatVal}>{awayData.season_averages.apg}</Text>
+                      <Text style={styles.miniStatLbl}>AST</Text>
+                    </View>
+                  </View>
+                </GlassCard>
+              )}
+              {!mlData && !awayData && (
+                <Text style={styles.mlStatusText}>Player projections unavailable</Text>
+              )}
+            </View>
           )}
 
           {/* Performance Trend Chart */}
@@ -226,14 +277,28 @@ export default function GameDetailsScreen({ route, navigation }: GameDetailsProp
           {/* Analytics Explanation */}
           <Text style={styles.sectionTitle}>🧠 Quick Analysis</Text>
           <GlassCard style={styles.analysisCard}>
-            <Text style={styles.analysisText}>
-              Based on recent performance, <Text style={styles.highlight}>{game.homeTeam.name}</Text> have
-              a slight edge at home. {chartPlayer?.name} has been averaging{' '}
-              <Text style={styles.highlight}>{chartPlayer?.ppg} PPG</Text> and is projected for{' '}
-              <Text style={styles.highlightOrange}>{chartPlayer?.projection} points</Text> in this
-              matchup. The odds favor the home team at{' '}
-              <Text style={styles.highlight}>{game.homeOdds}</Text>.
-            </Text>
+            {mlData && awayData ? (
+              <Text style={styles.analysisText}>
+                <Text style={styles.highlight}>{game.homeTeam.name}</Text> host{' '}
+                <Text style={styles.highlight}>{game.awayTeam.name}</Text> tonight.{`\n\n`}
+                {mlData.player.name} leads {game.homeTeam.name} averaging{' '}
+                <Text style={styles.highlightOrange}>{mlData.season_averages.ppg} PPG</Text> this season
+                — our AI projects{' '}
+                <Text style={styles.highlightOrange}>{mlData.prediction.projected_points} points</Text>{' '}
+                tonight.{`\n\n`}
+                {awayData.player.name} counters for {game.awayTeam.name} with{' '}
+                <Text style={styles.highlightOrange}>{awayData.season_averages.ppg} PPG</Text>, projected
+                at <Text style={styles.highlightOrange}>{awayData.prediction.projected_points}</Text>{' '}
+                tonight.{`\n\n`}
+                {mlData.prediction.projected_points > awayData.prediction.projected_points
+                  ? `Edge: ${game.homeTeam.name} 🏠`
+                  : `Edge: ${game.awayTeam.name} 🚀`}
+              </Text>
+            ) : (
+              <Text style={styles.analysisText}>
+                {loadingPredictions ? 'Loading AI analysis...' : 'AI analysis unavailable — ML service may be offline.'}
+              </Text>
+            )}
           </GlassCard>
 
           {/* Join Battle CTA */}
@@ -290,6 +355,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginBottom: 8,
+  },
+  // Side-by-side player cards
+  playerCardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  playerCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+  },
+  playerCardTeam: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  playerCardName: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  playerCardProjValue: {
+    color: Colors.neonOrange,
+    fontSize: 32,
+    fontWeight: '900',
+  },
+  playerCardProjLabel: {
+    color: Colors.textMuted,
+    fontSize: 10,
+    marginBottom: 10,
+  },
+  playerCardMiniStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  playerCardMiniStat: {
+    alignItems: 'center',
+  },
+  miniStatVal: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  miniStatLbl: {
+    color: Colors.textMuted,
+    fontSize: 9,
+    marginTop: 1,
   },
   mlCard: {
     backgroundColor: 'rgba(255,107,0,0.1)',

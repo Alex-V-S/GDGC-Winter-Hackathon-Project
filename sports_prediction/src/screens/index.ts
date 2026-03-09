@@ -3,3 +3,4 @@ export { default as HomeScreen } from './HomeScreen';
 export { default as GameDetailsScreen } from './GameDetailsScreen';
 export { default as BattleScreen } from './BattleScreen';
 export { default as LeaderboardScreen } from './LeaderboardScreen';
+export { default as ProfileScreen } from './ProfileScreen';

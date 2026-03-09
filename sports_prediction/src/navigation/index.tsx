@@ -12,6 +12,7 @@ import {
   GameDetailsScreen,
   BattleScreen,
   LeaderboardScreen,
+  ProfileScreen,
 } from '../screens';
 import { isConfigured, supabase } from '../services/supabase';
 
@@ -47,6 +48,13 @@ function MainTabs() {
         component={LeaderboardScreen}
         options={{
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
         }}
       />
     </Tab.Navigator>
