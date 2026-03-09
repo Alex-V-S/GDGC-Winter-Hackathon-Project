@@ -14,6 +14,7 @@ import { NBAGame } from '../types/index';
 import { MOCK_OPPONENTS } from '../data/mockData';
 import { useAppStore } from '../store/AppContext';
 import { GlassCard, CountdownTimer, CoinBadge } from '../components';
+import { supabase, isConfigured } from '../services/supabase';
 
 const SCORE_DIFFS = [1, 5, 10, 15, 20];
 
@@ -26,13 +27,30 @@ export default function BattleScreen({ route, navigation }: any) {
   const [battleResult, setBattleResult] = useState<'win' | 'loss' | null>(null);
   const [locked, setLocked] = useState(false);
 
-  const handleLockPrediction = useCallback(() => {
+  const handleLockPrediction = useCallback(async () => {
     if (!selectedWinner || selectedDiff === null) {
       Alert.alert('Incomplete', 'Pick a winner and score difference!');
       return;
     }
+
+    // Save pick to Supabase
+    if (isConfigured) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const team = [game.homeTeam, game.awayTeam].find((t) => t.id === selectedWinner);
+        const { error } = await supabase.from('picks').insert({
+          user_id: authUser.id,
+          game_id: game.id,
+          predicted_winner: team?.name ?? selectedWinner,
+        });
+        if (error) {
+          console.warn('Failed to save pick:', error.message);
+        }
+      }
+    }
+
     setLocked(true);
-  }, [selectedWinner, selectedDiff]);
+  }, [selectedWinner, selectedDiff, game]);
 
   const handleTimerComplete = useCallback(() => {
     // Mock result: 60% chance of win
