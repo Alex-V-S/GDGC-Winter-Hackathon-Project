@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,26 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../theme';
 import { useAppStore } from '../store/AppContext';
+import { supabase, isConfigured } from '../services/supabase';
 
 const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }: any) {
   const { login } = useAppStore();
+
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Animated values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -55,9 +65,47 @@ export default function LoginScreen({ navigation }: any) {
     ).start();
   }, []);
 
-  const handleEnter = () => {
-    login();
-    navigation.replace('MainTabs');
+  const handleAuth = async () => {
+    // If Supabase isn't configured yet, fall back to mock login
+    if (!isConfigured) {
+      login();
+      navigation.replace('MainTabs');
+      return;
+    }
+
+    if (!email || !password) {
+      Alert.alert('Missing fields', 'Please enter email and password.');
+      return;
+    }
+    if (mode === 'register' && !username) {
+      Alert.alert('Missing fields', 'Please choose a username.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) { Alert.alert('Login failed', error.message); return; }
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) { Alert.alert('Sign-up failed', error.message); return; }
+
+        // Create profile row for the new user
+        if (data.user) {
+          const { error: profileError } = await supabase.from('profiles').insert({
+            id: data.user.id,
+            username,
+          });
+          if (profileError) { Alert.alert('Profile error', profileError.message); return; }
+        }
+      }
+
+      login();
+      navigation.replace('MainTabs');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -82,19 +130,61 @@ export default function LoginScreen({ navigation }: any) {
           <View style={styles.courtLine} />
           <View style={styles.courtCircle} />
 
+          {/* Auth form */}
+          {mode === 'register' && (
+            <TextInput
+              style={styles.input}
+              placeholder="Username"
+              placeholderTextColor={Colors.textMuted}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+            />
+          )}
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor={Colors.textMuted}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor={Colors.textMuted}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
           {/* Enter button */}
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <TouchableOpacity style={styles.enterButton} activeOpacity={0.8} onPress={handleEnter}>
+            <TouchableOpacity style={styles.enterButton} activeOpacity={0.8} onPress={handleAuth} disabled={loading}>
               <LinearGradient
                 colors={[Colors.neonOrange, '#FF8F5E']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.enterGradient}
               >
-                <Text style={styles.enterText}>⚡ ENTER ARENA</Text>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.enterText}>
+                    {mode === 'login' ? '⚡ ENTER ARENA' : '🏀 CREATE ACCOUNT'}
+                  </Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
+
+          {/* Toggle login / register */}
+          <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')} style={styles.toggleButton}>
+            <Text style={styles.toggleText}>
+              {mode === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Stats teaser */}
           <View style={styles.statsTeaser}>
@@ -115,7 +205,7 @@ export default function LoginScreen({ navigation }: any) {
           </View>
         </Animated.View>
 
-        <Text style={styles.footer}>MVP v1.0 · No real auth</Text>
+        <Text style={styles.footer}>CourtCall v1.0</Text>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -159,7 +249,27 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,107,43,0.15)',
-    marginBottom: 32,
+    marginBottom: 20,
+  },
+  input: {
+    width: width * 0.78,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    color: Colors.textPrimary,
+    fontSize: 15,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
+  toggleButton: {
+    marginTop: 16,
+  },
+  toggleText: {
+    color: Colors.electricBlue,
+    fontSize: 13,
+    fontWeight: '600',
   },
   enterButton: {
     borderRadius: 30,
