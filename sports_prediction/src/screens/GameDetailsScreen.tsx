@@ -11,17 +11,36 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-gifted-charts';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Colors } from '../theme';
-import { NBAGame, NBAPlayer } from '../types/index';
+import { NBAGame, NBAPlayer, RootStackParamList } from '../types/index';
 import { GlassCard, PlayerStatCard } from '../components';
-import { fetchPlayerPointsPrediction } from '../services/mlPredictions';
+import { getPlayerPrediction, PlayerPredictionResponse } from '../services/api';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-export default function GameDetailsScreen({ route, navigation }: any) {
+const TEAM_STAR_PLAYERS: Record<string, string> = {
+  Lakers: 'LeBron James',
+  Warriors: 'Stephen Curry',
+  Celtics: 'Jayson Tatum',
+  Heat: 'Jimmy Butler',
+  Nuggets: 'Nikola Jokic',
+  Suns: 'Kevin Durant',
+  Bucks: 'Giannis Antetokounmpo',
+  Knicks: 'Jalen Brunson',
+  Clippers: 'Kawhi Leonard',
+  '76ers': 'Joel Embiid',
+  Bulls: 'DeMar DeRozan',
+  Mavericks: 'Luka Doncic',
+};
+
+type GameDetailsProps = NativeStackScreenProps<RootStackParamList, 'GameDetails'>;
+
+export default function GameDetailsScreen({ route, navigation }: GameDetailsProps) {
   const game: NBAGame = route.params.game;
   const [playersWithPredictions, setPlayersWithPredictions] = useState<NBAPlayer[]>(game.topPlayers);
   const [loadingPredictions, setLoadingPredictions] = useState(false);
+  const [mlData, setMlData] = useState<PlayerPredictionResponse | null>(null);
 
   // Animated 3D basketball
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -43,27 +62,32 @@ export default function GameDetailsScreen({ route, navigation }: any) {
       setPlayersWithPredictions(game.topPlayers);
       setLoadingPredictions(true);
 
-      const updatedPlayers = await Promise.all(
-        game.topPlayers.map(async (player) => {
-          const ml = await fetchPlayerPointsPrediction(player.name, player.team);
-          if (!ml) {
-            return player;
-          }
+      const homeTeamName = game.homeTeam.name;
+      const starPlayer = TEAM_STAR_PLAYERS[homeTeamName];
 
-          const recentGames = ml.historical_performance.map((item) => item.points);
+      let starPrediction: PlayerPredictionResponse | null = null;
+      if (starPlayer) {
+        starPrediction = await getPlayerPrediction(starPlayer, homeTeamName);
+      }
 
-          return {
-            ...player,
-            ppg: ml.season_averages.ppg,
-            rpg: ml.season_averages.rpg,
-            apg: ml.season_averages.apg,
-            recentGames: recentGames.length > 0 ? recentGames : player.recentGames,
-            projection: ml.prediction.projected_points,
-          };
-        })
-      );
+      const updatedPlayers = game.topPlayers.map((player) => {
+        if (!starPrediction || player.name !== starPrediction.player.name) {
+          return player;
+        }
+
+        const recentGames = starPrediction.historical_performance.map((item) => item.points);
+        return {
+          ...player,
+          ppg: starPrediction.season_averages.ppg,
+          rpg: starPrediction.season_averages.rpg,
+          apg: starPrediction.season_averages.apg,
+          recentGames: recentGames.length > 0 ? recentGames : player.recentGames,
+          projection: starPrediction.prediction.projected_points,
+        };
+      });
 
       if (!cancelled) {
+        setMlData(starPrediction);
         setPlayersWithPredictions(updatedPlayers);
         setLoadingPredictions(false);
       }
@@ -133,6 +157,31 @@ export default function GameDetailsScreen({ route, navigation }: any) {
             </Text>
             <Text style={styles.heroArena}>📍 {game.arena}</Text>
           </View>
+
+          {mlData && (
+            <View style={styles.mlCard}>
+              <Text style={styles.mlTitle}>🤖 AI Player Projection</Text>
+              <Text style={styles.mlPlayer}>{mlData.player.name}</Text>
+              <View style={styles.mlStats}>
+                <View style={styles.mlStat}>
+                  <Text style={styles.mlStatValue}>{mlData.prediction.projected_points}</Text>
+                  <Text style={styles.mlStatLabel}>Proj PTS</Text>
+                </View>
+                <View style={styles.mlStat}>
+                  <Text style={styles.mlStatValue}>{mlData.season_averages.ppg}</Text>
+                  <Text style={styles.mlStatLabel}>Avg PTS</Text>
+                </View>
+                <View style={styles.mlStat}>
+                  <Text style={styles.mlStatValue}>{mlData.season_averages.rpg}</Text>
+                  <Text style={styles.mlStatLabel}>Avg REB</Text>
+                </View>
+                <View style={styles.mlStat}>
+                  <Text style={styles.mlStatValue}>{mlData.season_averages.apg}</Text>
+                  <Text style={styles.mlStatLabel}>Avg AST</Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* Player Stats Cards */}
           <Text style={styles.sectionTitle}>⭐ Key Players</Text>
@@ -239,9 +288,24 @@ const styles = StyleSheet.create({
   mlStatusText: {
     color: Colors.textMuted,
     fontSize: 12,
-    marginTop: -4,
+    marginTop: 4,
     marginBottom: 8,
   },
+  mlCard: {
+    backgroundColor: 'rgba(255,107,0,0.1)',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,0,0.3)',
+  },
+  mlTitle: { color: '#FF6B00', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  mlPlayer: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 12 },
+  mlStats: { flexDirection: 'row', justifyContent: 'space-around' },
+  mlStat: { alignItems: 'center' },
+  mlStatValue: { color: '#FF6B00', fontSize: 20, fontWeight: '800' },
+  mlStatLabel: { color: '#888', fontSize: 11, marginTop: 2 },
   // Chart
   chartCard: { alignItems: 'center', paddingVertical: 20 },
   chartTitle: { color: Colors.textSecondary, fontSize: 13, marginBottom: 12 },

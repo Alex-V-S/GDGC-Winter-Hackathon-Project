@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { UserProfile } from '../types/index';
+import { isConfigured, supabase } from '../services/supabase';
 
 // ── State shape ───────────────────────────────────────────────────
 interface AppState {
   user: UserProfile;
   isLoggedIn: boolean;
-  login: () => void;
+  login: (authUserId?: string) => Promise<void>;
   logout: () => void;
   addCoins: (amount: number) => void;
   removeCoins: (amount: number) => void;
@@ -16,14 +17,14 @@ interface AppState {
 
 const DEFAULT_USER: UserProfile = {
   id: 'me',
-  username: 'Rookie',
-  coins: 2500,
-  level: 5,
-  xp: 320,
+  username: 'Player',
+  coins: 0,
+  level: 1,
+  xp: 0,
   xpToNext: 500,
-  wins: 22,
-  losses: 18,
-  streak: 3,
+  wins: 0,
+  losses: 0,
+  streak: 0,
 };
 
 const AppContext = createContext<AppState | undefined>(undefined);
@@ -33,7 +34,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile>(DEFAULT_USER);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const login = useCallback(() => setIsLoggedIn(true), []);
+  const login = useCallback(async (authUserId?: string) => {
+    if (!isConfigured || !authUserId) {
+      setIsLoggedIn(true);
+      return;
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('auth_id', authUserId)
+      .single();
+
+    if (error || !profile) {
+      console.warn('Profile fetch failed:', error?.message ?? 'Profile not found');
+      setIsLoggedIn(true);
+      return;
+    }
+
+    setUser((prev) => ({
+      ...prev,
+      id: profile.id ?? prev.id,
+      username: profile.username ?? prev.username,
+      coins: profile.coins ?? prev.coins,
+      xp: profile.xp ?? prev.xp,
+      streak: profile.streak ?? prev.streak,
+      level: profile.level ?? prev.level,
+      xpToNext: profile.xp_to_next ?? prev.xpToNext,
+      wins: profile.wins ?? prev.wins,
+      losses: profile.losses ?? prev.losses,
+    }));
+    setIsLoggedIn(true);
+  }, []);
   const logout = useCallback(() => setIsLoggedIn(false), []);
 
   const addCoins = useCallback((amount: number) => {

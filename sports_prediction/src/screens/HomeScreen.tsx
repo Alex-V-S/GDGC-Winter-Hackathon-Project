@@ -10,31 +10,62 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Colors } from '../theme';
 import { useAppStore } from '../store/AppContext';
-import { TEAMS, PLAYERS } from '../data/mockData';
-import { NBAGame, NBATeam } from '../types/index';
+import { MainTabParamList, NBAGame, NBAPlayer, NBATeam, RootStackParamList } from '../types/index';
 import { GameCard, CoinBadge, LevelProgressBar } from '../components';
 import { supabase, isConfigured } from '../services/supabase';
-
-// Lookup: team name → full NBATeam object (for enriching Supabase rows)
-const TEAM_MAP: Record<string, NBATeam> = {};
-TEAMS.forEach((t) => { TEAM_MAP[t.name] = t; });
 
 const FALLBACK_TEAM: NBATeam = {
   id: 'unknown', abbr: '???', name: 'Unknown', city: '', logo: '🏀', color: '#666',
 };
 
-function mapSupabaseGame(row: any): NBAGame {
-  const home = TEAM_MAP[row.home_team] ?? { ...FALLBACK_TEAM, name: row.home_team, abbr: row.home_team.slice(0, 3).toUpperCase() };
-  const away = TEAM_MAP[row.away_team] ?? { ...FALLBACK_TEAM, name: row.away_team, abbr: row.away_team.slice(0, 3).toUpperCase() };
+const FALLBACK_TOP_PLAYERS: NBAPlayer[] = [];
+
+const TEAM_ABBR_MAP: Record<string, string> = {
+  Lakers: 'LAL',
+  Warriors: 'GSW',
+  Celtics: 'BOS',
+  Heat: 'MIA',
+  Nuggets: 'DEN',
+  Suns: 'PHX',
+  Bucks: 'MIL',
+  Knicks: 'NYK',
+  Clippers: 'LAC',
+  '76ers': 'PHI',
+  Bulls: 'CHI',
+  Mavericks: 'DAL',
+};
+
+function buildTeam(name: string): NBATeam {
+  return {
+    ...FALLBACK_TEAM,
+    id: name.toLowerCase().replace(/\s+/g, '-'),
+    name,
+    abbr: TEAM_ABBR_MAP[name] ?? name.slice(0, 3).toUpperCase(),
+  };
+}
+
+interface SupabaseGameRow {
+  id: string;
+  home_team: string;
+  away_team: string;
+  tip_off: string;
+  winner: string | null;
+  home_score: number | null;
+  away_score: number | null;
+}
+
+function mapSupabaseGame(row: SupabaseGameRow): NBAGame {
+  const home = buildTeam(row.home_team);
+  const away = buildTeam(row.away_team);
 
   const tipOff = new Date(row.tip_off);
   const time = tipOff.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const date = tipOff.toLocaleDateString([], { month: 'short', day: 'numeric' });
-
-  const homePlayers = PLAYERS.filter((p) => p.team === home.abbr);
-  const awayPlayers = PLAYERS.filter((p) => p.team === away.abbr);
 
   return {
     id: row.id,
@@ -48,11 +79,16 @@ function mapSupabaseGame(row: any): NBAGame {
     status: row.winner ? 'finished' : 'upcoming',
     homeScore: row.home_score ?? undefined,
     awayScore: row.away_score ?? undefined,
-    topPlayers: [...homePlayers, ...awayPlayers].slice(0, 4),
+    topPlayers: FALLBACK_TOP_PLAYERS,
   };
 }
 
-export default function HomeScreen({ navigation }: any) {
+type HomeScreenProps = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAppStore();
   const [search, setSearch] = useState('');
   const [games, setGames] = useState<NBAGame[]>([]);
@@ -64,9 +100,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const fetchGames = async () => {
     if (!isConfigured) {
-      // Fallback: import mock data if Supabase not configured
-      const { GAMES } = require('../data/mockData');
-      setGames(GAMES);
+      setGames([]);
       setLoading(false);
       return;
     }
@@ -82,7 +116,7 @@ export default function HomeScreen({ navigation }: any) {
       console.warn('Failed to fetch games:', error.message);
       setGames([]);
     } else {
-      setGames((data ?? []).map(mapSupabaseGame));
+      setGames(((data ?? []) as SupabaseGameRow[]).map(mapSupabaseGame));
     }
     setLoading(false);
   };
@@ -152,7 +186,7 @@ export default function HomeScreen({ navigation }: any) {
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
-              <Text style={styles.empty}>No games match your search.</Text>
+              <Text style={styles.empty}>{search ? 'No games match your search.' : 'No games today.'}</Text>
             }
           />
         )}

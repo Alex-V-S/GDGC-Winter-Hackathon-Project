@@ -1,9 +1,10 @@
-import React from 'react';
-import { Text } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Colors } from '../theme';
+import { MainTabParamList, RootStackParamList } from '../types';
 
 import {
   LoginScreen,
@@ -12,9 +13,10 @@ import {
   BattleScreen,
   LeaderboardScreen,
 } from '../screens';
+import { isConfigured, supabase } from '../services/supabase';
 
 // ── Tab Navigator ─────────────────────────────────────────────────
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
   return (
@@ -52,7 +54,7 @@ function MainTabs() {
 }
 
 // ── Root Stack ────────────────────────────────────────────────────
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const arenaTheme = {
   ...DarkTheme,
@@ -67,9 +69,40 @@ const arenaTheme = {
 };
 
 export function Navigation({ onReady }: { onReady?: () => void }) {
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [initialRoute, setInitialRoute] = useState<'Login' | 'MainTabs'>('Login');
+
+  useEffect(() => {
+    const checkSession = async () => {
+      if (!isConfigured) {
+        setInitialRoute('Login');
+        setCheckingSession(false);
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      setInitialRoute(session ? 'MainTabs' : 'Login');
+      setCheckingSession(false);
+    };
+
+    checkSession();
+  }, []);
+
+  if (checkingSession) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.bgPrimary, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={Colors.neonOrange} size="large" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer theme={arenaTheme} onReady={onReady}>
       <Stack.Navigator
+        initialRouteName={initialRoute}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',

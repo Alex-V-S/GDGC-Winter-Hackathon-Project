@@ -68,7 +68,7 @@ export default function LoginScreen({ navigation }: any) {
   const handleAuth = async () => {
     // If Supabase isn't configured yet, fall back to mock login
     if (!isConfigured) {
-      login();
+      await login();
       navigation.replace('MainTabs');
       return;
     }
@@ -85,8 +85,9 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
     try {
       if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) { Alert.alert('Login failed', error.message); return; }
+        await login(data.user?.id);
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) { Alert.alert('Sign-up failed', error.message); return; }
@@ -95,13 +96,14 @@ export default function LoginScreen({ navigation }: any) {
         if (data.user) {
           const { error: profileError } = await supabase.from('profiles').insert({
             id: data.user.id,
+            auth_id: data.user.id,
             username,
           });
           if (profileError) { Alert.alert('Profile error', profileError.message); return; }
+          await login(data.user.id);
         }
       }
 
-      login();
       navigation.replace('MainTabs');
     } finally {
       setLoading(false);
