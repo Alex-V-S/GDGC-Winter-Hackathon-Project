@@ -18,6 +18,7 @@ interface AppState {
 const DEFAULT_USER: UserProfile = {
   id: 'me',
   username: 'Player',
+  fanIq: 0,
   coins: 0,
   level: 1,
   xp: 0,
@@ -56,6 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       id: profile.id ?? prev.id,
       username: profile.username ?? prev.username,
+      fanIq: profile.fan_iq ?? prev.fanIq,
       coins: profile.coins ?? prev.coins,
       xp: profile.xp ?? prev.xp,
       streak: profile.streak ?? prev.streak,

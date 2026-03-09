@@ -53,6 +53,7 @@ export interface BattleOpponent {
 export interface UserProfile {
   id: string;
   username: string;
+  fanIq: number;
   coins: number;
   level: number;
   xp: number;
